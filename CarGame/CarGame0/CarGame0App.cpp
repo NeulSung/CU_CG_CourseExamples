@@ -141,7 +141,10 @@ void Display()
 {
 	// 전체 화면을 지운다.
 	// glClear는 Display 함수 가장 윗 부분에서 한 번만 호출되어야한다.
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	if (g_camera_mode == 1)
+		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	if (g_camera_mode == 1)
+		glClearColor(0.f, 0.f, 0.f, 0.f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	
