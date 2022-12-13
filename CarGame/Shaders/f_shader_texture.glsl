@@ -46,15 +46,17 @@ void main()
 		
 	float d = length(light_position-fs_eye_dir);
 
+
 	vec3 ambient = I_a * K_a;
 	vec3 diffuse = I_l * K_d * max(0.f, dot(L, N));
 	vec3 specular = I_l * K_s * pow(max(0.f, dot(N, H)), shininess_n);
 
-	float darkside_s_d = 0.0f;
-	if ( dot(Sd,L) < light_cos_cutoff){
-		if(light_mode==1){
-		specular *= vec3(darkside_s_d,darkside_s_d,darkside_s_d);
-		diffuse *= vec3(darkside_s_d,darkside_s_d,darkside_s_d);
+	float darkness_s_d = 0.0f;
+	if(light_mode==1){
+		diffuse = I_l * K_d * max(0.f, dot(L, N))*pow(dot(Sd,L),4);
+		if ( dot(Sd,L) < light_cos_cutoff){
+			specular = vec3(darkness_s_d, darkness_s_d, darkness_s_d);
+			diffuse = vec3(darkness_s_d, darkness_s_d, darkness_s_d);
 		}
 	}
 
@@ -69,6 +71,7 @@ void main()
 		color = vec4(ambient + diffuse + specular, 1.f) * fs_color;
 
 	//color.rgb += ambient + diffuse + specular;
+
 	if(inverse)
 		color.rgb = (vec3(1.f, 1.f, 1.f), vec3(1.f,1.f,1.f));
 	else

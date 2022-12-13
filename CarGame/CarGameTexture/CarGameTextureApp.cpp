@@ -58,7 +58,7 @@ float g_car_angular_speed = 0;	          // 회전 속도 (각속도 - 초당 회전 각)
 //////////////////////////////////////////////////////////////////////
 //// Light Parameters
 //////////////////////////////////////////////////////////////////////
-static int g_sunlight_mode = 0;
+static int g_sunlight_mode = 1;
 
 //////////////////////////////////////////////////////////////////////
 //// Things Parameters
@@ -273,6 +273,22 @@ void Display()
 		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(T0 * glm::translate(glm::vec3(0, -0.44, 0)) * glm::scale(glm::vec3(5.f,1.f,5.f))));
 		DrawGroundTexture();
 
+		// Left Wall
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(T0 * glm::translate(glm::vec3(25.f, 15.44f, 0.f))* glm::rotate(glm::radians(90.f),glm::vec3(0,0,1))* glm::scale(glm::vec3(5.f,1.f,5.f))));
+		DrawGroundTexture();
+
+		// Right Wall
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(T0* glm::translate(glm::vec3(-25.f, 15.44f, 0.f))* glm::rotate(glm::radians(-90.f), glm::vec3(0, 0, 1))* glm::scale(glm::vec3(5.f, 1.f, 5.f))));
+		DrawGroundTexture();
+
+		// Out Wall
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(T0* glm::translate(glm::vec3(0.f, 15.44f, -25.f))* glm::rotate(glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))* glm::scale(glm::vec3(5.f, 1.f, 5.f))));
+		DrawGroundTexture();
+
+		// In Wall
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(T0* glm::translate(glm::vec3(0.f, 15.44f, 25.f))* glm::rotate(glm::radians(-90.f), glm::vec3(1.f, 0.f, 0.f))* glm::scale(glm::vec3(5.f, 1.f, 5.f))));
+		DrawGroundTexture();
+
 		glUniform1i(glGetUniformLocation(s_program_id, "isGround"), false);
 
 	}
@@ -431,7 +447,7 @@ void Keyboard(unsigned char key, int x, int y)
 			shininess_n += 10;
 		break;
 	case ',':
-		if (shininess_n >= 0)
+		if (shininess_n >= 10)
 			shininess_n -= 10;
 		break;
 	}
