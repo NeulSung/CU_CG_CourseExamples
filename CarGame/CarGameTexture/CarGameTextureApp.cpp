@@ -12,6 +12,10 @@
 #include "CarModel.h"
 #include "GroundTexture.h"
 #include "MoonTexture.h"
+#include "RingModel.h"
+#include "ProptopModel.h"
+#include "PropbottomModel.h"
+#include "EmissionLight.h"
 
 
 // Window and User Interface
@@ -27,7 +31,6 @@ extern GLuint g_window_h;
 // Camera 
 //////////////////////////////////////////////////////////////////////
 static Camera g_camera;
-static int g_camera_mode = 0;
 
 //////////////////////////////////////////////////////////////////////
 //// Define Shader Programs
@@ -52,9 +55,23 @@ float g_car_rotation_y = 0;		          // 현재 방향 (y축 회전)
 float g_car_angular_speed = 0;	          // 회전 속도 (각속도 - 초당 회전 각)
 
 
+//////////////////////////////////////////////////////////////////////
+//// Light Parameters
+//////////////////////////////////////////////////////////////////////
+static int g_sunlight_mode = 0;
 
+//////////////////////////////////////////////////////////////////////
+//// Things Parameters
+//////////////////////////////////////////////////////////////////////
+glm::vec3 g_ring_position(0.f, 1.5f, -4.25f);
+float g_ring_rotation_y = 0;
+float g_ring_angular_speed = glm::radians(1.5f);
 
+bool g_rotation = true;
 
+bool g_ground_shiness = false;
+
+float shininess_n = 50.f;
 
 
 /**
@@ -81,13 +98,21 @@ void InitOpenGL()
 
 
 	// Car
-	InitCarModel();
+	//InitCarModel();
+
+	// 받침대 생성
+	InitProptopModel();
+	InitPropbottomModel();
 
 	// 바닥 VAO 생성
 	InitGroundTexture();
 
 	// Moon VAO 생성
 	InitMoonTexture();
+
+	// Ring 생성
+	InitRingModel();
+	InitLightModel();
 }
 
 
@@ -105,9 +130,12 @@ void ClearOpenGLResource()
 {
 	// Delete (VAO, VBO)
 	DeleteBasicShapeObjs();
-	DeleteCarModel();
+	DeleteProptopModel();
+	DeletePropbottomModel();
 	DeleteGroundTexture();
 	DeleteMoonTexture();
+	DeleteRingModel();
+	DeleteLightModel();
 }
 
 
@@ -139,10 +167,10 @@ void Display()
 {
 	// 전체 화면을 지운다.
 	// glClear는 Display 함수 가장 윗 부분에서 한 번만 호출되어야한다.
-	if (g_camera_mode == 0)
+	if (g_sunlight_mode == 0)
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	if (g_camera_mode == 1)
-		glClearColor(0.f, 0.f, 0.f, 0.f);
+	if (g_sunlight_mode == 1)
+		glClearColor(0.1f, 0.1f, 0.1f, 0.1f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	
@@ -152,7 +180,7 @@ void Display()
 	int m_view_loc = glGetUniformLocation(s_program_id, "view_matrix");
 	int m_model_loc = glGetUniformLocation(s_program_id, "model_matrix");
 
-
+	glUniform1i(glGetUniformLocation(s_program_id, "light_mode"), g_sunlight_mode);
 	
 	// Projection Transform Matrix 설정.
 	glm::mat4 projection_matrix = glm::perspective(glm::radians(45.f), (float)g_window_w / g_window_h, 0.01f, 10000.f);
@@ -168,14 +196,85 @@ void Display()
 	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 
+	// Ring
+	{
+		glUniform1i(glGetUniformLocation(s_program_id, "flag_texture"), false);
+		glBindTexture(GL_TEXTURE_2D, s_program_id);
+
+		glm::mat4 ring_T = glm::rotate(g_ring_rotation_y, glm::vec3(0, 1, 0)) * glm::translate(g_ring_position);
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(ring_T));
+		DrawRingModel();
+
+		//glm::mat4 ring_T = glm::rotate(g_ring_rotation_y, glm::vec3(0, 1, 0)) * glm::translate(g_ring_position);
+
+		glUniform1i(glGetUniformLocation(s_program_id, "inverse"), true);
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(ring_T));
+		DrawLightModel();
+	}
+
+	glUniform1i(glGetUniformLocation(s_program_id, "inverse"), false);
+
+	// light 설정
+	{
+		glUniform1d(glGetUniformLocation(s_program_id, "light_mode"), g_sunlight_mode);
+
+		// 빛의 출발 점과, 진행 방향 설정.
+		glm::vec3 light_position(0.f, 3.f, -5.f);
+		//glm::vec3 light_dir(0.f, -1.f, 0.f);
+		//light_dir = glm::normalize(light_dir);
+
+		light_position = glm::rotateY(light_position, g_ring_rotation_y);
+		glm::vec3 light_dir = glm::vec3(0.f,3.f,0.f)-light_position;
+
+		light_dir = glm::normalize(light_dir);
+
+
+		// Apply Camera Matrices
+		////// *** 현재 카메라 방향을 고려하기 위해 view transform 적용  ***
+		//  light_position는 위치를 나타내는 포인트이므로 이동(Translation)변환이 적용되도록 한다. (네 번째 요소 1.f으로 셋팅)
+		light_position = glm::vec3(g_camera.GetGLViewMatrix() * glm::vec4(light_position, 1.f));
+		//  light_dir는 방향을 나타내는 벡터이므로 이동(Translation)변환이 적용되지 않도록 한다. (네 번째 요소 0.f으로 셋팅)
+		light_dir = glm::vec3(g_camera.GetGLViewMatrix() * glm::vec4(light_dir, 0.f));
+
+
+		int light_position_loc = glGetUniformLocation(s_program_id, "light_position");
+		glUniform3f(light_position_loc, light_position[0], light_position[1], light_position[2]);
+
+		int light_dir_loc = glGetUniformLocation(s_program_id, "light_dir");
+		glUniform3f(light_dir_loc, light_dir[0], light_dir[1], light_dir[2]);
+
+
+
+		// Spot Light 변수 설정.
+		float light_cos_cutoff = cos(glm::radians(70.f));
+		glm::vec3 light_indensity(1.0f, 1.0f, 1.0f);	// Red Light
+
+		int light_cos_cutoff_loc = glGetUniformLocation(s_program_id, "light_cos_cutoff");
+		glUniform1f(light_cos_cutoff_loc, light_cos_cutoff);
+
+		int light_intensity_loc = glGetUniformLocation(s_program_id, "I_l");
+		glUniform3f(light_intensity_loc, light_indensity[0], light_indensity[1], light_indensity[2]);
+	}
 
 	// texture 바닥 
 	{
 		glUniform1i(glGetUniformLocation(s_program_id, "flag_texture"), true);
+		glUniform1i(glGetUniformLocation(s_program_id, "isGround"), true);
+		glUniform1i(glGetUniformLocation(s_program_id, "isGround_shiness"), g_ground_shiness);
+
+		// Ground를 위한 Phong Shading 관련 변수 값을 설정한다.
+		int shininess_loc = glGetUniformLocation(s_program_id, "shininess_n");
+		glUniform1f(shininess_loc, shininess_n);
+
+		int K_s_loc = glGetUniformLocation(s_program_id, "K_s");
+		glUniform3f(K_s_loc, 0.3f, 0.3f, 0.3f);
 
 		glm::mat4 T0(1.f); // 단위 행렬
-		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(T0));
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(T0 * glm::translate(glm::vec3(0, -0.44, 0)) * glm::scale(glm::vec3(5.f,1.f,5.f))));
 		DrawGroundTexture();
+
+		glUniform1i(glGetUniformLocation(s_program_id, "isGround"), false);
+
 	}
 
 	// Moon
@@ -188,16 +287,22 @@ void Display()
 		DrawMoonTexture();
 	}
 
-	// Moving Car
+
+	// prop
 	{
 		glUniform1i(glGetUniformLocation(s_program_id, "flag_texture"), false);
 		glBindTexture(GL_TEXTURE_2D, s_program_id);
 
-		glm::mat4 car_T = glm::translate(g_car_poisition) * glm::rotate(g_car_rotation_y, glm::vec3(0.f, 1.f, 0.f));
+		glm::mat4 car_T = glm::translate(g_car_poisition);
 		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE,  glm::value_ptr(car_T));
-		DrawCarModel();
+		DrawProptopModel();
+
+		//glm::mat4 car_T = glm::translate(g_car_poisition);
+		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE, glm::value_ptr(car_T));
+		DrawPropbottomModel();
 	}
 
+	
 	
 
 	
@@ -218,15 +323,17 @@ void Timer(int value)
 	g_elaped_time_s += value/1000.f;
 
 
-	// Turn
-	g_car_rotation_y += g_car_angular_speed;
+	//// Turn
+	//g_car_rotation_y += g_car_angular_speed;
 
-	// Calculate Velocity
-	glm::vec3 speed_v = glm::vec3(0.f, 0.f, g_car_speed);
-	glm::vec3 velocity = glm::rotateY(speed_v, g_car_rotation_y);	// speed_v 를 y축을 기준으로 g_car_rotation_y 만큼 회전한다.
+	//// Calculate Velocity
+	//glm::vec3 speed_v = glm::vec3(0.f, 0.f, g_car_speed);
+	//glm::vec3 velocity = glm::rotateY(speed_v, g_car_rotation_y);	// speed_v 를 y축을 기준으로 g_car_rotation_y 만큼 회전한다.
+	//// Move
+	//g_car_poisition += velocity;
 
-	// Move
-	g_car_poisition += velocity;
+	if(g_rotation)
+		g_ring_rotation_y += g_ring_angular_speed;
 
 
 	// glutPostRedisplay는 가능한 빠른 시간 안에 전체 그림을 다시 그릴 것을 시스템에 요청한다.
@@ -268,34 +375,64 @@ ref: https://www.opengl.org/resources/libraries/glut/spec3/node49.html#SECTION00
 */
 void Keyboard(unsigned char key, int x, int y)
 {
-	switch (key)						
+	switch (key)
 	{
+		//case 's':
+		//	g_car_speed = -0.01f;		// 후진 속도 설정
+		//	glutPostRedisplay();
+		//	break;
+
+		//case 'w':
+		//	g_car_speed = 0.01f;		// 전진 속도 설정
+		//	glutPostRedisplay();
+		//	break;
+
+		//case 'a':
+		//	g_car_angular_speed = glm::radians( 1.f );		// 좌회전 각속도 설정
+		//	glutPostRedisplay();
+		//	break;
+
+		//case 'd':
+		//	g_car_angular_speed = -1 * glm::radians( 1.f );		//  우회전 각속도 설정
+		//	glutPostRedisplay();
+		//	break;
+	case 'n':
+		if (g_sunlight_mode == 1) {
+			g_sunlight_mode = 0;
+		}
+		else {
+			g_sunlight_mode = 1;
+		}
+		glutPostRedisplay();
+		break;
+	case 'N':
+		if (g_sunlight_mode == 1) {
+			g_sunlight_mode = 0;
+		}
+		else {
+			g_sunlight_mode = 1;
+		}
+		glutPostRedisplay();
+		break;
+	case 'p':
+		if (g_rotation)
+			g_rotation = false;
+		else
+			g_rotation = true;
+		break;
 	case 's':
-		g_car_speed = -0.01f;		// 후진 속도 설정
-		glutPostRedisplay();
+		if (g_ground_shiness)
+			g_ground_shiness = false;
+		else
+			g_ground_shiness = true;
 		break;
-
-	case 'w':
-		g_car_speed = 0.01f;		// 전진 속도 설정
-		glutPostRedisplay();
+	case '.':
+		if(shininess_n<=500)
+			shininess_n += 10;
 		break;
-
-	case 'a':
-		g_car_angular_speed = glm::radians( 1.f );		// 좌회전 각속도 설정
-		glutPostRedisplay();
-		break;
-
-	case 'd':
-		g_car_angular_speed = -1 * glm::radians( 1.f );		//  우회전 각속도 설정
-		glutPostRedisplay();
-		break;
-	case '1':
-		g_camera_mode = 0;
-		glutPostRedisplay();
-		break;
-	case '2':
-		g_camera_mode = 1;
-		glutPostRedisplay();
+	case ',':
+		if (shininess_n >= 0)
+			shininess_n -= 10;
 		break;
 	}
 

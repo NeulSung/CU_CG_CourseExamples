@@ -5,7 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include "../BaseCodes/Mesh.h"
-#include "CarModel.h"
+#include "PropbottomModel.h"
 
 
 ///////////////////////////////////////////////
@@ -19,16 +19,16 @@ static GLuint g_car_index_buf;
 
 static Mesh g_car_mesh;
 
-void InitCarModel()
+void InitPropbottomModel()
 {
-	g_car_mesh.ReadObjFormatFile("../Data/prop2.obj");
+	g_car_mesh.ReadObjFormatFile("../Data/prop_bottom.obj");
 	
 	g_car_mesh.TriangulateAndUniformizeBuffers();
 
 	g_car_mesh.ScaleUniformlyVertices(0.03f);
 	/*g_car_mesh.RotateVertices(glm::radians(-90.f), glm::vec3(1, 0, 0));
 	g_car_mesh.RotateVertices(glm::radians(180.f), glm::vec3(0, 1, 0));*/
-	//g_car_mesh.SetColor(0.3f, 0.6f, 0.9f, 1);
+	g_car_mesh.SetColor(0.f, 0.f, 0.f, 1);
 
 	// Vertex Array Object
 	glGenVertexArrays(1, &g_car_vao);
@@ -72,7 +72,7 @@ void InitCarModel()
 }
 
 
-void DrawCarModel()
+void DrawPropbottomModel()
 {
 	glBindVertexArray(g_car_vao);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_car_index_buf);
@@ -80,7 +80,7 @@ void DrawCarModel()
 }
 
 
-void DeleteCarModel()
+void DeletePropbottomModel()
 {
 	glDeleteBuffers(1, &g_car_vbo_pos);
 	glDeleteBuffers(1, &g_car_vbo_normal);

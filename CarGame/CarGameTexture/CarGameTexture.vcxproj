@@ -28,9 +28,13 @@
     <ClCompile Include="..\BaseCodes\MeshSphere.cpp" />
     <ClCompile Include="CarGameTextureApp.cpp" />
     <ClCompile Include="CarModel.cpp" />
+    <ClCompile Include="EmissionLight.cpp" />
     <ClCompile Include="GroundTexture.cpp" />
     <ClCompile Include="main_CarGameTexture.cpp" />
     <ClCompile Include="MoonTexture.cpp" />
+    <ClCompile Include="PropbottomModel.cpp" />
+    <ClCompile Include="ProptopModel.cpp" />
+    <ClCompile Include="RingModel.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\BaseCodes\BasicShapeObjs.h" />
@@ -40,8 +44,12 @@
     <ClInclude Include="..\BaseCodes\Mesh.h" />
     <ClInclude Include="CarGameTextureApp.h" />
     <ClInclude Include="CarModel.h" />
+    <ClInclude Include="EmissionLight.h" />
     <ClInclude Include="GroundTexture.h" />
     <ClInclude Include="MoonTexture.h" />
+    <ClInclude Include="PropbottomModel.h" />
+    <ClInclude Include="ProptopModel.h" />
+    <ClInclude Include="RingModel.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Shaders\f_shader_texture.glsl" />

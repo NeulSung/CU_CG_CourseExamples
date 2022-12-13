@@ -54,6 +54,18 @@
     <ClCompile Include="MoonTexture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RingModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PropbottomModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ProptopModel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EmissionLight.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\BaseCodes\BasicShapeObjs.h">
@@ -81,6 +93,18 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="MoonTexture.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RingModel.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PropbottomModel.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProptopModel.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="EmissionLight.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
