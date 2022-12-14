@@ -53,6 +53,7 @@ void main()
 
 	float darkness_s_d = 0.0f;
 	if(light_mode==1){
+		// Soft boundary effect
 		diffuse = I_l * K_d * max(0.f, dot(L, N))*pow(dot(Sd,L),4);
 		if ( dot(Sd,L) < light_cos_cutoff){
 			specular = vec3(darkness_s_d, darkness_s_d, darkness_s_d);

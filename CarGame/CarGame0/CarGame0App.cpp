@@ -12,6 +12,9 @@
 #include "../BaseCodes/BasicShapeObjs.h"
 #include "CarModel.h"
 #include "TreeModel0.h"
+#include <cmath>
+
+#include <iostream>
 
 
 
@@ -29,6 +32,21 @@ extern GLuint g_window_h;
 //////////////////////////////////////////////////////////////////////
 static Camera g_camera;
 static int g_camera_mode = 0;
+
+// 부드러운 시점 변환에 사용할 변수들
+//const float g_perspective_divider = 60;	//시점 변경 프레임
+//static float g_perspective_change_state = g_perspective_divider;	//0:start of perspective change
+//																	//0 to g_perspective_diver
+
+static bool g_perspective_changing = false;	//false: change is done or not yet
+											//true: changing
+
+static glm::vec3 pre_camera_position;		//이전에 방금까지의 카메라 위치,eye 포지션, 화각 저장.
+static glm::vec3 pre_camera_eye_position;
+static float pre_AOV;	//Angle Of View
+
+static float g_lerp_speed = 0.05f;	//lerp speed(a) value
+
 
 
 //////////////////////////////////////////////////////////////////////
@@ -48,7 +66,7 @@ float g_elaped_time_s = 0.f;	//
 //// Car Position, Rotation, Velocity
 //// 자동차 제어 변수들.
 //////////////////////////////////////////////////////////////////////
-glm::vec3 g_car_poisition(0.f, 0.f, 0.f); //위치
+glm::vec3 g_car_position(0.f, 0.f, 0.f); //위치
 float g_car_speed = 0;			          // 속도 (초당 이동 거리)
 float g_car_rotation_y = 0;		          // 현재 방향 (y축 회전)
 float g_car_angular_speed = 0;	          // 회전 속도 (각속도 - 초당 회전 각)
@@ -141,13 +159,8 @@ void Display()
 {
 	// 전체 화면을 지운다.
 	// glClear는 Display 함수 가장 윗 부분에서 한 번만 호출되어야한다.
-	if (g_camera_mode == 1)
-		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	if (g_camera_mode == 1)
-		glClearColor(0.f, 0.f, 0.f, 0.f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	
 
 	// Vertex shader 의 matrix 변수들의 location을 받아온다.
 	int m_proj_loc = glGetUniformLocation(s_program_id, "proj_matrix");
@@ -158,24 +171,147 @@ void Display()
 	glm::mat4 projection_matrix;
 	glm::mat4 view_matrix;
 
-	if ( g_camera_mode == 1 )// Top view
-	{
-		// Projection Transform Matrix 설정.
-		projection_matrix = glm::perspective(glm::radians(45.f), (float)g_window_w / g_window_h, 0.01f, 10000.f);
-		glUniformMatrix4fv(m_proj_loc, 1, GL_FALSE, glm::value_ptr(projection_matrix));
 
-		// Camera Transform Matrix 설정.
-		view_matrix = glm::lookAt(glm::vec3(0.f, 13.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
-		glUniformMatrix4fv(m_view_loc, 1, GL_FALSE, glm::value_ptr(view_matrix));
-	}
-	else
+	if ( g_camera_mode == 0 )//마우스 조작
 	{
+		//top view
 		// Projection Transform Matrix 설정.
-		projection_matrix = glm::perspective(glm::radians(45.f), (float)g_window_w / g_window_h, 0.01f, 10000.f);
+		/*projection_matrix = glm::perspective(glm::radians(45.f), (float)g_window_w / g_window_h, 0.01f, 10000.f);
+		glUniformMatrix4fv(m_proj_loc, 1, GL_FALSE, glm::value_ptr(projection_matrix));
+		 Camera Transform Matrix 설정.
+		view_matrix = glm::lookAt(glm::vec3(0.f, 13.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f));
+		glUniformMatrix4fv(m_view_loc, 1, GL_FALSE, glm::value_ptr(view_matrix));*/
+
+		// 마우스 조작 모드일 때 화각 정의, 저장.
+		float mouseControl_AOV = 45.f;
+		pre_AOV = mouseControl_AOV;
+
+		// 마우스 조작일 때 카메라 Position 저장
+		pre_camera_position = g_camera.getTranslation();	
+
+		// Projection Transform Matrix 설정.
+		projection_matrix = glm::perspective(glm::radians(mouseControl_AOV), (float)g_window_w / g_window_h, 0.01f, 10000.f);
 		glUniformMatrix4fv(m_proj_loc, 1, GL_FALSE, glm::value_ptr(projection_matrix));
 
 		// Camera Transform Matrix 설정.
 		view_matrix = g_camera.GetGLViewMatrix();
+		glUniformMatrix4fv(m_view_loc, 1, GL_FALSE, glm::value_ptr(view_matrix));
+
+		g_perspective_changing = false;
+		
+	}
+	else if(g_camera_mode == 1)//1인칭
+	{
+
+		// FPS Camera Position,Eye Vector 설정.
+		// 기준인 차 위치에서 rotateY를 이용해 회전.
+		glm::vec3 fps_camera_position = g_car_position + glm::rotateY(glm::vec3(0.08f, 0.6f, -0.15f), g_car_rotation_y);
+		glm::vec3 fps_eye_position = g_car_position + glm::rotateY(glm::vec3(0.f, 0.f, 3.f), g_car_rotation_y);
+		
+		// 1인칭 화각 설정
+		float fps_AOV = 80.f;
+
+		// 시점이 변지 않고, 일반적인 상황일 때
+		///	이전 포지션과, 목표 위치 카메라의 위치가 같고, 변화중이라는 신호가 없으면 일반적인 상황
+		if (!g_perspective_changing) {
+			
+			// 현재 카메라 Position, Eye, AOV 저장
+			pre_camera_position = fps_camera_position;
+			pre_camera_eye_position = fps_eye_position;
+			pre_AOV = fps_AOV;
+			g_lerp_speed = 0.05f;
+
+			// Projection Transform Matrix 설정.
+			projection_matrix = glm::perspective(glm::radians(fps_AOV), (float)g_window_w / g_window_h, 0.01f, 10000.f);
+			glUniformMatrix4fv(m_proj_loc, 1, GL_FALSE, glm::value_ptr(projection_matrix));
+
+			view_matrix =
+				glm::lookAt(fps_camera_position, fps_eye_position, glm::vec3(0.f, 1.f, 0.f));
+		}
+		// 시점이 변할 때
+		else if(g_perspective_changing) {
+			
+			// Projection Transform Matrix 설정.
+			/* 
+			 glm::lerp함수를 활용했음. lerp는 선형 보간을 해주는 함수이며, 인자는 x,y,a가 있다.
+			 x값에서 y로 선형 이동한다. 이때 리턴되는 식은 x*a+(1-a)*y이다.
+			 그래서 g_perspective_change_state를 g_perspective_divider로 나눈 값만큼 x쪽에서 y까지 움직인다.
+			 AOV, Position, Eye를 선형 보간한다.
+			 */
+			projection_matrix = glm::perspective(
+				glm::radians(glm::lerp(pre_AOV, fps_AOV, g_lerp_speed)),
+				(float)g_window_w / g_window_h, 0.01f, 10000.f);
+			glUniformMatrix4fv(m_proj_loc, 1, GL_FALSE, glm::value_ptr(projection_matrix));
+
+			view_matrix =
+
+				glm::lookAt(glm::lerp(pre_camera_position, fps_camera_position, g_lerp_speed),
+					glm::lerp(pre_camera_eye_position, fps_eye_position, g_lerp_speed),
+					glm::vec3(0.f, 1.f, 0.f));
+
+			pre_camera_position = glm::lerp(pre_camera_position, fps_camera_position, g_lerp_speed);
+			pre_camera_eye_position = glm::lerp(pre_camera_eye_position, fps_eye_position, g_lerp_speed);
+			pre_AOV = glm::lerp(pre_AOV, fps_AOV, g_lerp_speed);
+			if (g_lerp_speed < 1.f)
+				g_lerp_speed += 0.015f;
+
+			if (std::round(pre_camera_position.x * 10000.f) / 10000.f == std::round(fps_camera_position.x * 10000.f) / 10000.f) {
+				g_perspective_changing = false;
+				g_lerp_speed = 0.05f;
+			}
+		}
+
+		glUniformMatrix4fv(m_view_loc, 1, GL_FALSE, glm::value_ptr(view_matrix));
+	}
+	else if (g_camera_mode == 2)//3인칭(bev: bird eye view)
+	{
+		float bev_AOV = 20.f;
+
+		// Camera Transform Matrix 설정.
+		glm::vec3 bev_camera_correction = glm::vec3(0.f, 4.f, -8.f);
+		glm::vec3 bev_camera_position = g_car_position + glm::rotateY(bev_camera_correction, g_car_rotation_y); //g_car_position + fps_camera_correction;
+		glm::vec3 bev_eye_position = g_car_position + glm::rotateY(glm::vec3(0.f, 0.f, 3.f), g_car_rotation_y);
+
+		// 일반적인 bird eye view 상태
+		if (!g_perspective_changing) {
+
+			pre_camera_position = bev_camera_position;
+			pre_camera_eye_position = bev_eye_position;
+			pre_AOV = bev_AOV;
+			g_lerp_speed = 0.05f;
+
+			// Projection Transform Matrix 설정.
+			projection_matrix = glm::perspective(glm::radians(bev_AOV), (float)g_window_w / g_window_h, 0.01f, 10000.f);
+			glUniformMatrix4fv(m_proj_loc, 1, GL_FALSE, glm::value_ptr(projection_matrix));
+
+			view_matrix =
+				//glm::rotate(g_car_rotation_y, glm::vec3(0.f, -1.f, 0.f)) *
+				glm::lookAt(bev_camera_position, bev_eye_position, glm::vec3(0.f, 1.f, 0.f));
+		}
+		// 다른 시점에서 bird eye view로 변하는 상태
+		else if(g_perspective_changing) {
+			
+			// Projection Transform Matrix 설정.
+			projection_matrix = glm::perspective(glm::radians(glm::lerp(pre_AOV,bev_AOV, g_lerp_speed)), (float)g_window_w / g_window_h, 0.01f, 10000.f);
+			glUniformMatrix4fv(m_proj_loc, 1, GL_FALSE, glm::value_ptr(projection_matrix));
+
+			view_matrix=
+				glm::lookAt(glm::lerp(pre_camera_position, bev_camera_position, g_lerp_speed),
+				glm::lerp(pre_camera_eye_position, bev_eye_position, g_lerp_speed),
+				glm::vec3(0.f, 1.f, 0.f));
+
+			pre_camera_position = glm::lerp(pre_camera_position, bev_camera_position, g_lerp_speed);
+			pre_camera_eye_position = glm::lerp(pre_camera_eye_position, bev_eye_position, g_lerp_speed);
+			pre_AOV = glm::lerp(pre_AOV, bev_AOV, g_lerp_speed);
+			if (g_lerp_speed < 1.f)
+				g_lerp_speed += 0.015f;
+
+			if (std::round(pre_camera_position.x * 10000.f) / 10000.f == std::round(bev_camera_position.x * 10000.f) / 10000.f) {
+				g_perspective_changing = false;
+				g_lerp_speed = 0.01f;
+			}
+		}
+
 		glUniformMatrix4fv(m_view_loc, 1, GL_FALSE, glm::value_ptr(view_matrix));
 	}
 
@@ -204,7 +340,7 @@ void Display()
 
 	// Moving Car
 	{
-		glm::mat4 car_T = glm::translate(g_car_poisition) * glm::rotate(g_car_rotation_y, glm::vec3(0.f, 1.f, 0.f));
+		glm::mat4 car_T = glm::translate(g_car_position) * glm::rotate(g_car_rotation_y, glm::vec3(0.f, 1.f, 0.f));
 		glUniformMatrix4fv(m_model_loc, 1, GL_FALSE,  glm::value_ptr(car_T));
 		DrawCarModel();
 	}
@@ -247,7 +383,10 @@ void Timer(int value)
 	glm::vec3 velocity = glm::rotateY(speed_v, g_car_rotation_y);	// speed_v 를 y축을 기준으로 g_car_rotation_y 만큼 회전한다.
 
 	// Move
-	g_car_poisition += velocity;
+	g_car_position += velocity;
+
+	// Perspective Change
+	//if (g_perspective_change_state < g_perspective_divider)	g_perspective_change_state++;
 
 
 	// glutPostRedisplay는 가능한 빠른 시간 안에 전체 그림을 다시 그릴 것을 시스템에 요청한다.
@@ -287,6 +426,9 @@ Keyboard: 키보드 입력이 있을 때마다 자동으로 호출되는 함수.
 ref: https://www.opengl.org/resources/libraries/glut/spec3/node49.html#SECTION00084000000000000000
 
 */
+
+//시점 변환(키보드 1,2,3)을 누를 때 g_perspective_change_state가 0으로 초기화가 된다.
+//이는 시점이 변환됨을 알림.
 void Keyboard(unsigned char key, int x, int y)
 {
 	switch (key)						
@@ -313,14 +455,23 @@ void Keyboard(unsigned char key, int x, int y)
 
 	case '1':
 		g_camera_mode = 0;
+		g_perspective_changing = true;
+		g_lerp_speed = 0.01f;
 		glutPostRedisplay();
 		break;
 
 	case '2':
 		g_camera_mode = 1;
+		g_perspective_changing = true;
+		g_lerp_speed = 0.01f;
 		glutPostRedisplay();
 		break;
-
+	case '3':
+		g_camera_mode = 2;
+		g_perspective_changing = true;
+		g_lerp_speed = 0.01f;
+		glutPostRedisplay();
+		break;
 	}
 
 }
